@@ -49,8 +49,12 @@
   // each installer.
   //
   // ponytail: the STT model (ggml-small-q8_0.bin) is downloaded into the
-  // userData cache on first use by electron/stt/modelManager.ts, so no model
-  // files are bundled at build time.
+  // userData cache on first use by electron/stt/modelManager.ts. For offline
+  // internal distribution, the GGML file is dropped into resources-stt/ and
+  // the win extraResources entry below bundles it; electron/stt then seeds
+  // the userData cache from that copy so first use needs no network. The
+  // directory is optional — absent, behavior is download-on-first-use as
+  // upstream.
   "extraResources": [
     // Attribution + LGPL source offer for the bundled ffmpeg DLLs and
     // whisper.cpp binaries. Redistributing LGPL libraries obliges us to ship
@@ -304,6 +308,15 @@
         // installer, plus an LGPL redistribution obligation, for a file no
         // shipped code opens.
         "filter": ["win32-*/*", "!win32-*/ffmpeg.exe"]
+      },
+      {
+        // Offline internal distribution: bundle the whisper GGML weights when
+        // resources-stt/ has been populated (see the ponytail note above).
+        // electron-builder ignores this entry when the directory is empty, so
+        // official builds without the model are unaffected.
+        "from": "resources-stt",
+        "to": "stt-models/whisper-ggml",
+        "filter": ["*.bin"]
       }
     ],
     // The D3D11 compositor addon deliberately does NOT travel through `files` into

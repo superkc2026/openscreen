@@ -32,6 +32,7 @@ vi.mock("./whisperServer", () => {
 
 vi.mock("./modelManager", () => ({
 	ensureModels: vi.fn(async () => undefined),
+	seedBundledModel: vi.fn(async () => false),
 	modelPaths: (base: string) => ({
 		whisper: `${base}/whisper-ggml/ggml-small-q8_0.bin`,
 	}),

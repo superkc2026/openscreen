@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
-import { mkdir, rename, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -81,6 +81,41 @@ export function modelPaths(baseDir: string): Record<SttModelId, string> {
 	return {
 		whisper: path.join(baseDir, STT_MODELS.whisper.cacheDir, MODEL_FILE),
 	};
+}
+
+/**
+ * Offline distribution seed: when the GGML weights ship inside the app bundle
+ * (`resources/stt-models/whisper-ggml/<MODEL_FILE>`, placed there by the
+ * electron-builder `resources-stt` extraResources entry), copy them into the
+ * userData cache so first use needs no network.
+ *
+ * Returns true when a seed happened. The copy lands via the same
+ * `.partial` → rename dance as a download, and `ensureModels()` still runs
+ * (and SHA-256-verifies the seeded file) afterwards — a corrupted bundle is
+ * treated exactly like a corrupted download: displaced by a fresh fetch, not
+ * trusted. No bundled copy (dev builds, official installers) → no-op, and
+ * network download remains the only path.
+ */
+export async function seedBundledModel(baseDir: string, resourcesDir: string): Promise<boolean> {
+	const target = modelPaths(baseDir).whisper;
+	try {
+		const s = await stat(target);
+		if (s.isFile() && s.size > 0) return false; // cache already populated
+	} catch {
+		// not present — fall through to the bundled copy
+	}
+	const bundled = path.join(resourcesDir, "stt-models", STT_MODELS.whisper.cacheDir, MODEL_FILE);
+	try {
+		const bs = await stat(bundled);
+		if (!bs.isFile() || bs.size === 0) return false;
+	} catch {
+		return false; // no bundled model — official/dev layout
+	}
+	await mkdir(path.dirname(target), { recursive: true });
+	const tmp = `${target}.partial`;
+	await copyFile(bundled, tmp);
+	await rename(tmp, target);
+	return true;
 }
 
 /**

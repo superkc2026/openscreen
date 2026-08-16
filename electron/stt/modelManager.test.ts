@@ -4,7 +4,13 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { areModelsPresent, ensureModels, modelPaths, STT_MODELS } from "./modelManager";
+import {
+	areModelsPresent,
+	ensureModels,
+	modelPaths,
+	STT_MODELS,
+	seedBundledModel,
+} from "./modelManager";
 
 describe("modelManager", () => {
 	let dir: string;
@@ -184,6 +190,40 @@ describe("modelManager", () => {
 		} finally {
 			STT_MODELS.whisper.files[0].expectedSha256 = originalSha;
 		}
+	});
+
+	it("seedBundledModel copies a bundled GGML file into an empty cache", async () => {
+		const bundledDir = path.join(dir, "resources", "stt-models", "whisper-ggml");
+		await mkdir(bundledDir, { recursive: true });
+		await writeFile(path.join(bundledDir, "ggml-small-q8_0.bin"), "bundled-weights");
+
+		const seeded = await seedBundledModel(path.join(dir, "cache"), path.join(dir, "resources"));
+		expect(seeded).toBe(true);
+		expect(
+			await readFile(path.join(dir, "cache", "whisper-ggml", "ggml-small-q8_0.bin"), "utf8"),
+		).toBe("bundled-weights");
+		// No partial left behind.
+		expect(existsSync(path.join(dir, "cache", "whisper-ggml", "ggml-small-q8_0.bin.partial"))).toBe(
+			false,
+		);
+	});
+
+	it("seedBundledModel is a no-op when the cache is already populated", async () => {
+		const cacheDir = path.join(dir, "cache");
+		const paths = modelPaths(cacheDir);
+		await mkdir(path.dirname(paths.whisper), { recursive: true });
+		await writeFile(paths.whisper, "existing-weights");
+
+		const seeded = await seedBundledModel(cacheDir, path.join(dir, "resources"));
+		expect(seeded).toBe(false);
+		expect(await readFile(paths.whisper, "utf8")).toBe("existing-weights");
+	});
+
+	it("seedBundledModel is a no-op when no bundled model exists", async () => {
+		const cacheDir = path.join(dir, "cache");
+		const seeded = await seedBundledModel(cacheDir, path.join(dir, "resources"));
+		expect(seeded).toBe(false);
+		expect(existsSync(path.join(cacheDir, "whisper-ggml", "ggml-small-q8_0.bin"))).toBe(false);
 	});
 
 	it("ensureModels surfaces 4xx errors immediately instead of retrying", async () => {

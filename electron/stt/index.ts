@@ -1,7 +1,7 @@
 import path from "node:path";
 import { app, type IpcMain } from "electron";
 import { planChunks } from "./chunking";
-import { ensureModels, modelPaths } from "./modelManager";
+import { ensureModels, modelPaths, seedBundledModel } from "./modelManager";
 import type {
 	SttPhraseSegment,
 	SttStatusEvent,
@@ -147,6 +147,11 @@ export class SttManager {
 	private async prepare(): Promise<void> {
 		const modelsDir = this.getModelsDir();
 		this.emit({ phase: "model", model: "whisper", downloadedBytes: 0, totalBytes: 0 });
+		// Offline builds bundle the GGML weights under resources/stt-models/;
+		// seed the userData cache from that copy when present so first use
+		// works with no network. ensureModels() below still runs and
+		// SHA-256-verifies whatever the seed placed (or finds) on disk.
+		await seedBundledModel(modelsDir, process.resourcesPath ?? "");
 		await ensureModels({
 			baseDir: modelsDir,
 			onProgress: (event) => {
